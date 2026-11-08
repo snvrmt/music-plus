@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:music_player/source/youtube_music.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 Future<void> main(List<String> args) async {
   final query = args.isEmpty ? 'Daft Punk Get Lucky' : args.join(' ');
@@ -25,6 +26,27 @@ Future<void> main(List<String> args) async {
   } catch (e) {
     stdout.writeln('  video search error: $e');
     failed = true;
+  }
+
+  final ids = [if (songs.isNotEmpty) songs.first.videoId, 'Rgrt_8mXrK8', '5NV6Rdv1a3I'];
+  final combos = <String, List<YoutubeApiClient>?>{
+    'ios': [YoutubeApiClient.ios],
+    'androidVr': [YoutubeApiClient.androidVr],
+    'safari': [YoutubeApiClient.safari],
+    'tv': [YoutubeApiClient.tv],
+    'mweb': [YoutubeApiClient.mweb],
+    'android': [YoutubeApiClient.android],
+  };
+  for (final id in ids) {
+    for (final e in combos.entries) {
+      try {
+        final url = await YouTubeMusic().audioUrl(id, using: e.value);
+        final res = await http.get(url, headers: {'Range': 'bytes=0-1023'});
+        stdout.writeln('  $id ${e.key}: OK itag=${url.queryParameters['itag']} range=${res.statusCode}');
+      } catch (err) {
+        stdout.writeln('  $id ${e.key}: FAIL ${err.toString().split('\n').first}');
+      }
+    }
   }
 
   if (songs.isNotEmpty) {

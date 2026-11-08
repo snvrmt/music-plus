@@ -19,5 +19,5 @@ jobs:
         with:
           channel: stable
           cache: true
-      - run: flutter pub get
+      - run: flutter pub get && grep -A3 "youtube_explode_dart:" pubspec.lock
       - run: dart run tool/smoke_test.dart "${{ github.event.inputs.query || 'Daft Punk Get Lucky' }}"

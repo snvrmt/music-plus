@@ -114,14 +114,21 @@ class YouTubeMusic {
 
   /// Resolve a playable audio-only stream URL (AAC/M4A when available,
   /// since iOS plays that natively). URLs expire, so they are cached briefly.
-  Future<Uri> audioUrl(String videoId) async {
+  /// Client order tried when resolving streams (first one that works wins).
+  static List<YoutubeApiClient> clients = [
+    YoutubeApiClient.ios,
+    YoutubeApiClient.androidVr,
+    YoutubeApiClient.safari,
+  ];
+
+  Future<Uri> audioUrl(String videoId, {List<YoutubeApiClient>? using}) async {
     final cached = _urlCache[videoId];
     if (cached != null && DateTime.now().difference(cached.$2) < const Duration(hours: 3)) {
       return cached.$1;
     }
     final manifest = await _yt.videos.streamsClient.getManifest(
       videoId,
-      ytClients: [YoutubeApiClient.ios, YoutubeApiClient.androidVr],
+      ytClients: using ?? clients,
     );
     final audio = manifest.audioOnly;
     if (audio.isEmpty) throw Exception('No audio stream for $videoId');
