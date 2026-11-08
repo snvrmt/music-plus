@@ -1,0 +1,46 @@
+name: Test MP4 defragmenter
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['lib/source/mp4_defrag.dart', 'tool/defrag_test.dart', '.github/workflows/defrag-test.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - run: flutter pub get
+      - name: Make fragmented test files (like YouTube's)
+        run: |
+          ffmpeg -v error -f lavfi -i "sine=frequency=440:duration=95" -c:a aac -b:a 128k \
+            -movflags +empty_moov+default_base_moof+frag_custom -frag_duration 10000000 a.m4a
+          ffmpeg -v error -f lavfi -i "sine=frequency=330:duration=200" -c:a aac -b:a 128k \
+            -movflags +dash+global_sidx -frag_duration 10000000 b.m4a
+          ffmpeg -v error -f lavfi -i "sine=frequency=550:duration=61" -c:a aac -b:a 128k \
+            -movflags +frag_keyframe+empty_moov+default_base_moof c.m4a
+      - name: Convert and verify
+        run: |
+          set -e
+          for f in a b c; do
+            dart run tool/defrag_test.dart $f.m4a $f-out.m4a
+            want=$(ffprobe -v error -show_entries format=duration -of csv=p=0 $f.m4a)
+            got=$(ffprobe -v error -show_entries format=duration -of csv=p=0 $f-out.m4a)
+            frames_in=$(ffprobe -v error -count_packets -select_streams a -show_entries stream=nb_read_packets -of csv=p=0 $f.m4a)
+            frames_out=$(ffprobe -v error -count_packets -select_streams a -show_entries stream=nb_read_packets -of csv=p=0 $f-out.m4a)
+            errs=$(ffmpeg -v error -i $f-out.m4a -f null - 2>&1 | wc -l)
+            moofs=$(grep -c moof $f-out.m4a || true)
+            echo "$f: duration in=$want out=$got packets in=$frames_in out=$frames_out decode_errors=$errs"
+            python3 -c "import sys; a,b=float('$want'),float('$got'); sys.exit(0 if abs(a-b)<0.5 else 1)"
+            [ "$frames_in" = "$frames_out" ]
+            [ "$errs" = "0" ]
+          done
+          # Also check the output decodes to the same audio as the input
+          ffmpeg -v error -i b.m4a -f s16le - | md5sum
+          ffmpeg -v error -i b-out.m4a -f s16le - | md5sum
