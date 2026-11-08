@@ -3,7 +3,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import '../data/models.dart';
-import '../source/youtube_music.dart';
+import 'audio_cache.dart';
 
 /// One app-wide player. Wraps just_audio; just_audio_background adds
 /// background playback plus lock-screen / Control Center controls.
@@ -18,7 +18,12 @@ class Player extends ChangeNotifier {
       index = i ?? -1;
       final t = current;
       if (t != null) Library.I.addToHistory(t);
+      _prefetchNext();
       notifyListeners();
+    });
+    audio.playbackEventStream.listen((_) {}, onError: (Object e, StackTrace st) {
+      final t = current;
+      if (t != null) _fail(t, e);
     });
     audio.shuffleModeEnabledStream.listen((_) => notifyListeners());
     audio.loopModeStream.listen((_) => notifyListeners());
@@ -70,36 +75,40 @@ class Player extends ChangeNotifier {
       artUri: t.cover.imageUrl == null ? null : Uri.parse(t.cover.imageUrl!),
     );
     if (t.videoId == null) return AudioSource.uri(Uri.parse(t.url), tag: tag);
-    final stream = await YouTubeMusic.I.resolve(t.videoId!);
-    return _YouTubeAudioSource(stream, tag: tag);
+    final file = await AudioCache.I.cached(t.videoId!);
+    if (file != null) return AudioSource.file(file.path, tag: tag);
+    return _YouTubeAudioSource(t.videoId!, tag: tag);
   }
 
   Future<void> playQueue(List<Track> tracks,
       {int start = 0, String from = '', bool shuffle = false}) async {
     if (tracks.isEmpty) return;
     final gen = ++_generation;
-    var list = List.of(tracks);
+    final list = List.of(tracks);
     if (shuffle) {
       list.shuffle();
       start = 0;
     }
     start = start.clamp(0, list.length - 1);
 
-    // Show the tapped song right away while its stream is looked up.
     queue
       ..clear()
-      ..add(list[start]);
-    index = 0;
+      ..addAll(list);
+    index = start;
     fromLabel = from;
     _resolving = true;
     notifyListeners();
 
     try {
-      await audio.stop();
-      final first = await _source(list[start]);
+      // Fetch the tapped song first so it plays straight from a file.
+      final firstId = list[start].videoId;
+      if (firstId != null) await AudioCache.I.get(firstId);
+      if (gen != _generation) return;
+      final sources = [for (final t in list) await _source(t)];
       if (gen != _generation) return;
       await audio.setShuffleModeEnabled(false);
-      await audio.setAudioSources([first], initialIndex: 0);
+      await audio.setAudioSources(sources, initialIndex: start);
+      if (gen != _generation) return;
       _resolving = false;
       notifyListeners();
       audio.play();
@@ -107,35 +116,15 @@ class Player extends ChangeNotifier {
       if (gen != _generation) return;
       _resolving = false;
       _fail(list[start], e);
-      return;
     }
+  }
 
-    // Songs after the tapped one, then the ones before it.
-    for (var i = start + 1; i < list.length; i++) {
-      if (gen != _generation) return;
-      try {
-        final s = await _source(list[i]);
-        if (gen != _generation) return;
-        await audio.addAudioSource(s);
-        queue.add(list[i]);
-        notifyListeners();
-      } catch (e) {
-        debugPrint('Skipping ${list[i].title}: $e');
-      }
-    }
-    for (var i = start - 1; i >= 0; i--) {
-      if (gen != _generation) return;
-      try {
-        final s = await _source(list[i]);
-        if (gen != _generation) return;
-        await audio.insertAudioSource(0, s);
-        queue.insert(0, list[i]);
-        index = audio.currentIndex ?? index;
-        notifyListeners();
-      } catch (e) {
-        debugPrint('Skipping ${list[i].title}: $e');
-      }
-    }
+  /// Download the next song while this one plays, so it starts instantly.
+  void _prefetchNext() {
+    final order = upNext;
+    if (order.isEmpty) return;
+    final id = order.first.videoId;
+    if (id != null) AudioCache.I.get(id).ignore();
   }
 
   Future<void> playTrack(Track t, {String from = ''}) => playQueue([t], from: from);
@@ -145,8 +134,8 @@ class Player extends ChangeNotifier {
     try {
       final s = await _source(t);
       final at = index + 1;
-      await audio.insertAudioSource(at, s);
       queue.insert(at, t);
+      await audio.insertAudioSource(at, s);
       notifyListeners();
     } catch (e) {
       _fail(t, e);
@@ -233,23 +222,24 @@ class Library extends ChangeNotifier {
   }
 }
 
-/// Feeds YouTube audio to the iPhone's player through the app itself.
-/// The built-in player can't fetch YouTube's links directly ("-1 unknown
-/// error"), so the app downloads the bytes in ranges and hands them over.
+/// A YouTube song that isn't on the phone yet. When the player needs it,
+/// it's downloaded and converted by [AudioCache], then served from the file.
 class _YouTubeAudioSource extends StreamAudioSource {
-  _YouTubeAudioSource(this.stream, {super.tag});
-  final YtStream stream;
+  _YouTubeAudioSource(this.videoId, {super.tag});
+  final String videoId;
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {
+    final file = await AudioCache.I.get(videoId);
+    final length = await file.length();
     start ??= 0;
-    end ??= stream.length;
+    end ??= length;
     return StreamAudioResponse(
-      sourceLength: stream.length,
+      sourceLength: length,
       contentLength: end - start,
       offset: start,
-      stream: YouTubeMusic.I.download(stream, start: start, end: end),
-      contentType: stream.mimeType,
+      stream: file.openRead(start, end),
+      contentType: file.path.endsWith('.mp4') ? 'video/mp4' : 'audio/mp4',
     );
   }
 }
