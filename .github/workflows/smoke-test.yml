@@ -1,0 +1,23 @@
+name: Smoke test YouTube source
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: Search query
+        default: Daft Punk Get Lucky
+  push:
+    branches: [main]
+    paths: ['lib/source/**', 'tool/**']
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run tool/smoke_test.dart "${{ github.event.inputs.query || 'Daft Punk Get Lucky' }}"

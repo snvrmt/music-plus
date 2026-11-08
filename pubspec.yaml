@@ -13,6 +13,8 @@ dependencies:
   flutter_svg: ^2.0.10
   just_audio: ^0.10.4
   just_audio_background: ^0.0.1-beta.17
+  http: ^1.2.2
+  youtube_explode_dart: ^2.5.0
 
 flutter:
   uses-material-design: true
