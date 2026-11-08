@@ -1,0 +1,51 @@
+name: Build iOS (unsigned IPA)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # The ios/ folder is generated here, so you never need a Mac to create it.
+      - name: Generate iOS project if missing
+        run: |
+          if [ ! -d ios ]; then
+            flutter create . --platforms=ios --org com.personal --project-name music_player
+          fi
+
+      - name: Configure Info.plist
+        run: |
+          PLIST=ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Music" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Music" "$PLIST"
+          # Keep audio playing when the screen locks (needed from Phase 2 on).
+          if ! /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes" "$PLIST" >/dev/null 2>&1; then
+            /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$PLIST"
+          fi
+
+      - name: Build
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr MusicPlayer.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicPlayer-ipa
+          path: MusicPlayer.ipa
