@@ -1,7 +1,7 @@
 name: music_player
-description: "My personal music player."
+description: "Music+, my personal music player."
 publish_to: "none"
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -10,6 +10,18 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.10
+  just_audio: ^0.10.4
+  just_audio_background: ^0.0.1-beta.17
 
 flutter:
   uses-material-design: true
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: false
+  ios: true
+  image_path: "assets/icon.png"
+  remove_alpha_ios: true

@@ -26,8 +26,8 @@ jobs:
       - name: Configure Info.plist
         run: |
           PLIST=ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Music" "$PLIST" \
-            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Music" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Music+" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Music+" "$PLIST"
           # Keep audio playing when the screen locks (needed from Phase 2 on).
           if ! /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes" "$PLIST" >/dev/null 2>&1; then
             /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST"
@@ -37,6 +37,7 @@ jobs:
       - name: Build
         run: |
           flutter pub get
+          dart run flutter_launcher_icons
           flutter build ios --release --no-codesign
 
       - name: Package IPA
