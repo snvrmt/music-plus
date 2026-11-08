@@ -31,6 +31,13 @@ class YtResult {
       '$title — $artist${album.isEmpty ? '' : ' ($album)'} [$durationLabel] $videoId';
 }
 
+class YtStream {
+  const YtStream(this.url, this.length, this.mimeType);
+  final Uri url;
+  final int length;
+  final String mimeType;
+}
+
 class YouTubeMusic {
   YouTubeMusic({http.Client? client}) : _http = client ?? http.Client();
 
@@ -38,7 +45,7 @@ class YouTubeMusic {
 
   final http.Client _http;
   final YoutubeExplode _yt = YoutubeExplode();
-  final Map<String, (Uri, DateTime)> _urlCache = {};
+  final Map<String, (YtStream, DateTime)> _streamCache = {};
 
   static const _endpoint = 'https://music.youtube.com/youtubei/v1/search?prettyPrint=false';
   static const _clientVersion = '1.20241106.01.00';
@@ -130,8 +137,12 @@ class YouTubeMusic {
   /// Last client that worked; tried first next time.
   String? workingClient;
 
-  Future<Uri> audioUrl(String videoId, {List<YoutubeApiClient>? using}) async {
-    final cached = _urlCache[videoId];
+  Future<Uri> audioUrl(String videoId, {List<YoutubeApiClient>? using}) async =>
+      (await resolve(videoId, using: using)).url;
+
+  /// Find a working audio stream: its URL, size in bytes and MIME type.
+  Future<YtStream> resolve(String videoId, {List<YoutubeApiClient>? using}) async {
+    final cached = _streamCache[videoId];
     if (cached != null && DateTime.now().difference(cached.$2) < const Duration(hours: 3)) {
       return cached.$1;
     }
@@ -145,25 +156,25 @@ class YouTubeMusic {
         final manifest =
             await _yt.videos.streamsClient.getManifest(videoId, ytClients: [client]);
         // iOS can only play AAC/MP4 audio, not WebM/Opus.
-        final candidates = <Uri>[
+        final candidates = <YtStream>[
           ...(manifest.audioOnly.where((s) => s.container == StreamContainer.mp4).toList()
                 ..sort((a, b) => b.bitrate.compareTo(a.bitrate)))
-              .map((s) => s.url),
+              .map((s) => YtStream(s.url, s.size.totalBytes, 'audio/mp4')),
           // Fallback: a small video+audio MP4; only the audio is heard.
           ...(manifest.muxed.where((s) => s.container == StreamContainer.mp4).toList()
                 ..sort((a, b) => a.bitrate.compareTo(b.bitrate)))
-              .map((s) => s.url),
+              .map((s) => YtStream(s.url, s.size.totalBytes, 'video/mp4')),
         ];
         if (candidates.isEmpty) {
           problems.add('$name: no MP4 audio');
           continue;
         }
-        for (final url in candidates.take(2)) {
-          final code = await _probe(url);
+        for (final st in candidates.take(2)) {
+          final code = await _probe(st.url);
           if (code == 200 || code == 206) {
             workingClient = name;
-            _urlCache[videoId] = (url, DateTime.now());
-            return url;
+            _streamCache[videoId] = (st, DateTime.now());
+            return st;
           }
           problems.add('$name: HTTP $code');
         }
@@ -172,6 +183,27 @@ class YouTubeMusic {
       }
     }
     throw Exception('No playable stream for $videoId. ${problems.join('; ')}');
+  }
+
+  /// Download [length] bytes from [start] in 1 MB range requests
+  /// (YouTube throttles or rejects big single requests).
+  Stream<List<int>> download(YtStream st, {int start = 0, int? end}) async* {
+    const chunk = 1024 * 1024;
+    final stop = end ?? st.length;
+    var pos = start;
+    while (pos < stop) {
+      final last = (pos + chunk < stop ? pos + chunk : stop) - 1;
+      final req = http.Request('GET', st.url)..headers['Range'] = 'bytes=$pos-$last';
+      final res = await _http.send(req);
+      if (res.statusCode != 206 && res.statusCode != 200) {
+        await res.stream.drain<void>();
+        throw Exception('Download failed (HTTP ${res.statusCode})');
+      }
+      await for (final bytes in res.stream) {
+        pos += bytes.length;
+        yield bytes;
+      }
+    }
   }
 
   Future<int> _probe(Uri url) async {

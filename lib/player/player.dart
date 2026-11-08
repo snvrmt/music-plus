@@ -62,19 +62,16 @@ class Player extends ChangeNotifier {
   }
 
   Future<AudioSource> _source(Track t) async {
-    final uri = t.videoId != null
-        ? await YouTubeMusic.I.audioUrl(t.videoId!)
-        : Uri.parse(t.url);
-    return AudioSource.uri(
-      uri,
-      tag: MediaItem(
-        id: t.id,
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        artUri: t.cover.imageUrl == null ? null : Uri.parse(t.cover.imageUrl!),
-      ),
+    final tag = MediaItem(
+      id: t.id,
+      title: t.title,
+      artist: t.artist,
+      album: t.album,
+      artUri: t.cover.imageUrl == null ? null : Uri.parse(t.cover.imageUrl!),
     );
+    if (t.videoId == null) return AudioSource.uri(Uri.parse(t.url), tag: tag);
+    final stream = await YouTubeMusic.I.resolve(t.videoId!);
+    return _YouTubeAudioSource(stream, tag: tag);
   }
 
   Future<void> playQueue(List<Track> tracks,
@@ -233,5 +230,26 @@ class Library extends ChangeNotifier {
     history.insert(0, t);
     if (history.length > 50) history.removeLast();
     notifyListeners();
+  }
+}
+
+/// Feeds YouTube audio to the iPhone's player through the app itself.
+/// The built-in player can't fetch YouTube's links directly ("-1 unknown
+/// error"), so the app downloads the bytes in ranges and hands them over.
+class _YouTubeAudioSource extends StreamAudioSource {
+  _YouTubeAudioSource(this.stream, {super.tag});
+  final YtStream stream;
+
+  @override
+  Future<StreamAudioResponse> request([int? start, int? end]) async {
+    start ??= 0;
+    end ??= stream.length;
+    return StreamAudioResponse(
+      sourceLength: stream.length,
+      contentLength: end - start,
+      offset: start,
+      stream: YouTubeMusic.I.download(stream, start: start, end: end),
+      contentType: stream.mimeType,
+    );
   }
 }
