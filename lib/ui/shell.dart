@@ -59,7 +59,8 @@ class _RootShellState extends State<RootShell> {
       ..showSnackBar(SnackBar(
         content: Text(msg),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 10),
+        showCloseIcon: true,
       ));
     Player.I.error.value = null;
   }

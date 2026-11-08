@@ -115,29 +115,70 @@ class YouTubeMusic {
   /// Resolve a playable audio-only stream URL (AAC/M4A when available,
   /// since iOS plays that natively). URLs expire, so they are cached briefly.
   /// Client order tried when resolving streams (first one that works wins).
-  static List<YoutubeApiClient> clients = [
-    YoutubeApiClient.ios,
-    YoutubeApiClient.androidVr,
-    YoutubeApiClient.safari,
+  /// Clients tried one at a time, in order. Each client's URLs are checked
+  /// with a tiny download before use, because some clients (notably iOS)
+  /// now hand out URLs that answer 403 without extra tokens.
+  static List<(String, YoutubeApiClient)> clients = [
+    ('androidVr', YoutubeApiClient.androidVr),
+    ('tv', YoutubeApiClient.tv),
+    ('safari', YoutubeApiClient.safari),
+    ('android', YoutubeApiClient.android),
+    ('ios', YoutubeApiClient.ios),
+    ('mweb', YoutubeApiClient.mweb),
   ];
+
+  /// Last client that worked; tried first next time.
+  String? workingClient;
 
   Future<Uri> audioUrl(String videoId, {List<YoutubeApiClient>? using}) async {
     final cached = _urlCache[videoId];
     if (cached != null && DateTime.now().difference(cached.$2) < const Duration(hours: 3)) {
       return cached.$1;
     }
-    final manifest = await _yt.videos.streamsClient.getManifest(
-      videoId,
-      ytClients: using ?? clients,
-    );
-    final audio = manifest.audioOnly;
-    if (audio.isEmpty) throw Exception('No audio stream for $videoId');
-    final mp4 = audio.where((s) => s.container == StreamContainer.mp4).toList();
-    final best = (mp4.isNotEmpty ? mp4 : audio.toList())
-      ..sort((a, b) => b.bitrate.compareTo(a.bitrate));
-    final url = best.first.url;
-    _urlCache[videoId] = (url, DateTime.now());
-    return url;
+    final order = using != null
+        ? [for (final c in using) ('custom', c)]
+        : ([...clients]..sort((a, b) =>
+            (a.$1 == workingClient ? 0 : 1).compareTo(b.$1 == workingClient ? 0 : 1)));
+    final problems = <String>[];
+    for (final (name, client) in order) {
+      try {
+        final manifest =
+            await _yt.videos.streamsClient.getManifest(videoId, ytClients: [client]);
+        // iOS can only play AAC/MP4 audio, not WebM/Opus.
+        final candidates = <Uri>[
+          ...(manifest.audioOnly.where((s) => s.container == StreamContainer.mp4).toList()
+                ..sort((a, b) => b.bitrate.compareTo(a.bitrate)))
+              .map((s) => s.url),
+          // Fallback: a small video+audio MP4; only the audio is heard.
+          ...(manifest.muxed.where((s) => s.container == StreamContainer.mp4).toList()
+                ..sort((a, b) => a.bitrate.compareTo(b.bitrate)))
+              .map((s) => s.url),
+        ];
+        if (candidates.isEmpty) {
+          problems.add('$name: no MP4 audio');
+          continue;
+        }
+        for (final url in candidates.take(2)) {
+          final code = await _probe(url);
+          if (code == 200 || code == 206) {
+            workingClient = name;
+            _urlCache[videoId] = (url, DateTime.now());
+            return url;
+          }
+          problems.add('$name: HTTP $code');
+        }
+      } catch (e) {
+        problems.add('$name: ${e.toString().split('\n').first}');
+      }
+    }
+    throw Exception('No playable stream for $videoId. ${problems.join('; ')}');
+  }
+
+  Future<int> _probe(Uri url) async {
+    final req = http.Request('GET', url)..headers['Range'] = 'bytes=0-1';
+    final res = await _http.send(req).timeout(const Duration(seconds: 8));
+    await res.stream.drain<void>();
+    return res.statusCode;
   }
 
   void dispose() {

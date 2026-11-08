@@ -166,10 +166,9 @@ class Player extends ChangeNotifier {
 
   void _fail(Track t, Object e) {
     debugPrint('Playback error for ${t.title}: $e');
-    final msg = e.toString();
-    error.value = msg.contains('not a bot') || msg.contains('unavailable')
-        ? 'YouTube wouldn’t give us “${t.title}”. Try another song.'
-        : 'Couldn’t play “${t.title}”. Check your connection.';
+    final msg = e.toString().replaceFirst('Exception: ', '');
+    final short = msg.length > 220 ? '${msg.substring(0, 220)}…' : msg;
+    error.value = 'Couldn’t play “${t.title}”.\n$short';
     notifyListeners();
   }
 
