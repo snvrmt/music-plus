@@ -3,6 +3,7 @@
 // here: when YouTube changes something, this is the only file to fix.
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -154,7 +155,9 @@ class YouTubeMusic {
     for (final (name, client) in order) {
       try {
         final manifest =
-            await _yt.videos.streamsClient.getManifest(videoId, ytClients: [client]);
+            await _yt.videos.streamsClient
+                .getManifest(videoId, ytClients: [client])
+                .timeout(const Duration(seconds: 15));
         // iOS can only play AAC/MP4 audio, not WebM/Opus.
         final candidates = <YtStream>[
           ...(manifest.audioOnly.where((s) => s.container == StreamContainer.mp4).toList()
@@ -185,8 +188,51 @@ class YouTubeMusic {
     throw Exception('No playable stream for $videoId. ${problems.join('; ')}');
   }
 
-  /// Download [length] bytes from [start] in 1 MB range requests
-  /// (YouTube throttles or rejects big single requests).
+  /// Download a whole stream into memory, [parallel] pieces at a time.
+  /// Pieces are requested with YouTube's own `range=` URL parameter in
+  /// small chunks, which avoids YouTube slowing big requests to play speed.
+  Future<Uint8List> downloadAll(YtStream st,
+      {void Function(int received, int total)? onProgress, int parallel = 4}) async {
+    const chunk = 512 * 1024;
+    final total = st.length;
+    final out = Uint8List(total);
+    final starts = [for (var p = 0; p < total; p += chunk) p];
+    var next = 0, received = 0;
+
+    Future<void> worker() async {
+      while (next < starts.length) {
+        final from = starts[next++];
+        final to = (from + chunk < total ? from + chunk : total) - 1;
+        final url = st.url.replace(queryParameters: {
+          ...st.url.queryParameters,
+          'range': '$from-$to',
+        });
+        for (var attempt = 1;; attempt++) {
+          try {
+            final res = await _http.get(url).timeout(const Duration(seconds: 20));
+            if (res.statusCode != 200 && res.statusCode != 206) {
+              throw Exception('HTTP ${res.statusCode}');
+            }
+            final body = res.bodyBytes;
+            if (body.length != to - from + 1) {
+              throw Exception('got ${body.length} of ${to - from + 1} bytes');
+            }
+            out.setRange(from, to + 1, body);
+            received += body.length;
+            onProgress?.call(received, total);
+            break;
+          } catch (e) {
+            if (attempt >= 3) throw Exception('Download failed at byte $from: $e');
+          }
+        }
+      }
+    }
+
+    await Future.wait([for (var i = 0; i < parallel; i++) worker()]);
+    return out;
+  }
+
+  /// Stream bytes [start]..[end] of a stream in 1 MB pieces.
   Stream<List<int>> download(YtStream st, {int start = 0, int? end}) async* {
     const chunk = 1024 * 1024;
     final stop = end ?? st.length;
@@ -194,7 +240,7 @@ class YouTubeMusic {
     while (pos < stop) {
       final last = (pos + chunk < stop ? pos + chunk : stop) - 1;
       final req = http.Request('GET', st.url)..headers['Range'] = 'bytes=$pos-$last';
-      final res = await _http.send(req);
+      final res = await _http.send(req).timeout(const Duration(seconds: 20));
       if (res.statusCode != 206 && res.statusCode != 200) {
         await res.stream.drain<void>();
         throw Exception('Download failed (HTTP ${res.statusCode})');

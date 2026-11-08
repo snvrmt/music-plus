@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../source/mp4_defrag.dart';
@@ -47,27 +48,35 @@ class AudioCache {
     final existing = await cached(videoId);
     if (existing != null) return existing;
 
-    final stream = await YouTubeMusic.I.resolve(videoId);
-    final buf = BytesBuilder(copy: false);
-    await for (final chunk in YouTubeMusic.I.download(stream)) {
-      buf.add(chunk);
-    }
-    Uint8List bytes = buf.takeBytes();
-    if (bytes.length < stream.length) {
-      throw Exception('Download stopped early (${bytes.length}/${stream.length} bytes)');
-    }
+    _setProgress(videoId, 0, 'Finding song');
+    try {
+      final stream = await YouTubeMusic.I.resolve(videoId);
+      _setProgress(videoId, 0, 'Downloading');
+      Uint8List bytes = await YouTubeMusic.I.downloadAll(stream,
+          onProgress: (got, total) => _setProgress(videoId, got / total, 'Downloading'));
 
-    final audioOnly = stream.mimeType == 'audio/mp4';
-    if (audioOnly) {
-      final input = bytes;
-      final fixed = await Isolate.run(() => defragmentMp4(input));
-      if (fixed != null) bytes = fixed;
-    }
+      final audioOnly = stream.mimeType == 'audio/mp4';
+      if (audioOnly) {
+        _setProgress(videoId, 1, 'Preparing');
+        final input = bytes;
+        final fixed = await Isolate.run(() => defragmentMp4(input));
+        if (fixed != null) bytes = fixed;
+      }
 
-    final dir = await _folder();
-    final path = '${dir.path}/$videoId.${audioOnly ? 'm4a' : 'mp4'}';
-    final tmp = File('$path.part');
-    await tmp.writeAsBytes(bytes, flush: true);
-    return tmp.rename(path);
+      final dir = await _folder();
+      final path = '${dir.path}/$videoId.${audioOnly ? 'm4a' : 'mp4'}';
+      final tmp = File('$path.part');
+      await tmp.writeAsBytes(bytes, flush: true);
+      return await tmp.rename(path);
+    } finally {
+      progress.value = Map.of(progress.value)..remove(videoId);
+    }
+  }
+
+  /// Download progress per video: (0..1, what's happening).
+  final ValueNotifier<Map<String, (double, String)>> progress = ValueNotifier({});
+
+  void _setProgress(String id, double p, String label) {
+    progress.value = Map.of(progress.value)..[id] = (p, label);
   }
 }

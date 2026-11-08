@@ -9,6 +9,7 @@ import '../player/player.dart';
 import '../theme.dart';
 import '../ui/cover_art.dart';
 import '../ui/icons.dart';
+import '../ui/shell.dart';
 import '../ui/widgets.dart';
 
 void openNowPlaying(BuildContext context) {
@@ -77,7 +78,10 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                       child: SizedBox(
                           width: 88, height: 44, child: Center(child: Grabber(color: c.npTrack))),
                     ),
-                    Text(p.fromLabel.isEmpty ? 'Now Playing' : 'Playing from ${p.fromLabel}',
+                    LoadStatus(
+                        track: t,
+                        fallback:
+                            p.fromLabel.isEmpty ? 'Now Playing' : 'Playing from ${p.fromLabel}',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.npSub)),
                     const SizedBox(height: 24),
                     LayoutBuilder(builder: (context, box) {

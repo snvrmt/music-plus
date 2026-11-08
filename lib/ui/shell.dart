@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../data/models.dart';
+import '../player/audio_cache.dart';
 import '../player/player.dart';
 import '../screens/home.dart';
 import '../screens/library.dart';
@@ -196,10 +198,7 @@ class MiniPlayer extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 1),
-                    Text(t.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13, color: c.sub)),
+                    LoadStatus(track: t, fallback: t.artist, style: TextStyle(fontSize: 13, color: c.sub)),
                   ]),
                 ),
                 if (p.loading && !p.playing)
@@ -224,6 +223,30 @@ class MiniPlayer extends StatelessWidget {
             ),
           ),
         );
+      },
+    );
+  }
+}
+
+/// Shows "Downloading 42%" while [track] is being fetched, else [fallback].
+class LoadStatus extends StatelessWidget {
+  const LoadStatus({super.key, required this.track, required this.fallback, required this.style});
+  final Track track;
+  final String fallback;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder(
+      valueListenable: AudioCache.I.progress,
+      builder: (context, map, _) {
+        final p = track.videoId == null ? null : map[track.videoId];
+        final text = p == null
+            ? fallback
+            : p.$2 == 'Downloading'
+                ? 'Downloading ${(p.$1 * 100).round()}%'
+                : '${p.$2}\u2026';
+        return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
       },
     );
   }
