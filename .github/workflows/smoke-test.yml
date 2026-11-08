@@ -6,9 +6,6 @@ on:
       query:
         description: Search query
         default: Daft Punk Get Lucky
-  push:
-    branches: [main]
-    paths: ['lib/source/**', 'tool/**']
 
 jobs:
   smoke:
@@ -20,6 +17,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get && grep -A4 "youtube_explode_dart:" pubspec.lock | grep version
+      # Note: YouTube blocks stream lookups from GitHub's data-centre IPs
+      # ("Sign in to confirm you're not a bot"), so only search is meaningful here.
       - run: dart run tool/smoke_test.dart "${{ github.event.inputs.query || 'Daft Punk Get Lucky' }}"
       - run: dart run tool/player_probe.dart
         if: always()

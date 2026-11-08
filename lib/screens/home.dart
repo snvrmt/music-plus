@@ -15,6 +15,16 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    return ListenableBuilder(
+      listenable: Library.I,
+      builder: (context, _) => _build(context, c),
+    );
+  }
+
+  Widget _build(BuildContext context, AppColors c) {
+    final history = Library.I.history;
+    final recent = history.isEmpty ? recentlyPlayed : history.take(6).toList();
+    final all = history.isEmpty ? recentlyPlayed : history;
     return ListView(
       padding: const EdgeInsets.only(bottom: 16),
       children: [
@@ -58,7 +68,7 @@ class HomePage extends StatelessWidget {
               builder: (_) => TrackListPage(
                     title: 'Recently Played',
                     back: 'Home',
-                    tracks: recentlyPlayed,
+                    tracks: all,
                   ))),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -69,10 +79,10 @@ class HomePage extends StatelessWidget {
             ]),
           ),
         ),
-        for (var i = 0; i < recentlyPlayed.length; i++)
+        for (var i = 0; i < recent.length; i++)
           TrackRow(
-            track: recentlyPlayed[i],
-            onTap: () => Player.I.playQueue(recentlyPlayed, start: i, from: 'Recently Played'),
+            track: recent[i],
+            onTap: () => Player.I.playQueue(recent, start: i, from: 'Recently Played'),
           ),
       ],
     );

@@ -78,7 +78,18 @@ class CoverArt extends StatelessWidget {
         width: w,
         height: h,
         child: cover.imageUrl != null
-            ? Image.network(cover.imageUrl!, fit: BoxFit.cover)
+            ? Image.network(
+                cover.imageUrl!,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                frameBuilder: (context, child, frame, sync) => frame == null && !sync
+                    ? ColoredBox(color: cover.bg)
+                    : child,
+                errorBuilder: (_, __, ___) => ColoredBox(
+                  color: cover.bg,
+                  child: Stack(clipBehavior: Clip.hardEdge, children: [shape]),
+                ),
+              )
             : ColoredBox(
                 color: cover.bg,
                 child: Stack(clipBehavior: Clip.hardEdge, children: [shape]),

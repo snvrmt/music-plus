@@ -214,15 +214,21 @@ class _LiveList extends StatelessWidget {
         final lib = Library.I;
         final List<Track> tracks;
         if (liked) {
-          tracks = allTracks.where((t) => lib.isLiked(t.id)).toList();
+          tracks = [...allTracks, ...lib.known.values]
+              .where((t) => lib.isLiked(t.id))
+              .fold<Map<String, Track>>({}, (m, t) => m..[t.id] = t)
+              .values
+              .toList();
         } else {
           final fromPlaylists = playlists
               .where((p) => lib.isDownloaded(p.id))
               .expand((p) => p.tracks)
               .map((t) => t.id)
               .toSet();
-          tracks = allTracks
+          tracks = [...allTracks, ...lib.known.values]
               .where((t) => lib.isDownloaded(t.id) || fromPlaylists.contains(t.id))
+              .fold<Map<String, Track>>({}, (m, t) => m..[t.id] = t)
+              .values
               .toList();
         }
         return TrackListPage(

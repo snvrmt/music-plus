@@ -124,7 +124,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                         label: Library.I.isLiked(t.id)
                             ? 'Remove from Liked Songs'
                             : 'Add to Liked Songs',
-                        onTap: () => Library.I.toggleLike(t.id),
+                        onTap: () => Library.I.toggleLike(t),
                       ),
                       const SizedBox(width: 10),
                       CircleIconButton(MIcons.more,

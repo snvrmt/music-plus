@@ -39,6 +39,31 @@ class _RootShellState extends State<RootShell> {
 
   final _keys = List.generate(4, (_) => GlobalKey<NavigatorState>());
 
+  @override
+  void initState() {
+    super.initState();
+    Player.I.error.addListener(_showError);
+  }
+
+  @override
+  void dispose() {
+    Player.I.error.removeListener(_showError);
+    super.dispose();
+  }
+
+  void _showError() {
+    final msg = Player.I.error.value;
+    if (msg == null || !mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ));
+    Player.I.error.value = null;
+  }
+
   void _select(int i) {
     if (i == _tab) {
       _keys[i].currentState?.popUntil((r) => r.isFirst);
@@ -176,10 +201,22 @@ class MiniPlayer extends StatelessWidget {
                         style: TextStyle(fontSize: 13, color: c.sub)),
                   ]),
                 ),
-                CircleIconButton(p.playing ? MIcons.pause : MIcons.play,
-                    iconSize: 24,
-                    label: p.playing ? 'Pause' : 'Play',
-                    onTap: p.togglePlay),
+                if (p.loading && !p.playing)
+                  const SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Center(
+                      child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.4, color: kRed)),
+                    ),
+                  )
+                else
+                  CircleIconButton(p.playing ? MIcons.pause : MIcons.play,
+                      iconSize: 24,
+                      label: p.playing ? 'Pause' : 'Play',
+                      onTap: p.togglePlay),
                 CircleIconButton(MIcons.next,
                     iconSize: 24, label: 'Next track', onTap: p.next),
               ]),

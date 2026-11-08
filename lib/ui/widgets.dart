@@ -267,9 +267,12 @@ Future<void> showSongSheet(BuildContext context, Track track) {
           }),
           SheetRow(liked ? MIcons.heartFilled : MIcons.heart,
               liked ? 'Remove from Liked Songs' : 'Add to Liked Songs',
-              onTap: () => lib.toggleLike(track.id)),
+              onTap: () => lib.toggleLike(track)),
           SheetRow(MIcons.download, dl ? 'Remove Download' : 'Download',
-              onTap: () => lib.toggleDownload(track.id)),
+              onTap: () {
+                lib.remember(track);
+                lib.toggleDownload(track.id);
+              }),
           SheetRow(MIcons.user, 'Go to Artist', onTap: () {
             close();
             showSoon(messengerContext, 'Artist pages');
