@@ -1,0 +1,20 @@
+name: Inspect youtube_explode
+on: workflow_dispatch
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: flutter pub get
+      - run: grep -A4 "youtube_explode_dart:" pubspec.lock
+      - run: flutter pub outdated | grep -i -E "youtube|Package" || true
+      - run: |
+          D=$(ls -d ~/.pub-cache/hosted/pub.dev/youtube_explode_dart-*/ | tail -1); echo $D
+          echo "--- clients"; grep -n "static const" $D/lib/src/reverse_engineering/clients/*.dart $D/lib/src/videos/streams/*client*.dart 2>/dev/null | grep -i client | head -40
+          grep -rn "YoutubeApiClient [a-zA-Z]* = \|static const [a-zA-Z]* = YoutubeApiClient" $D/lib | head -30
+          echo "--- hls"; grep -rln -i "hls" $D/lib | head
+          grep -rn "get hls\|hlsManifest\|HlsAudio" $D/lib | head -20
+          echo "--- po token"; grep -rn -i "potoken\|po_token\|poToken" $D/lib | head -10
+          echo "--- changelog"; head -60 $D/CHANGELOG.md
