@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 import '../data/models.dart';
+import '../util/log.dart';
 import 'audio_cache.dart';
 
 /// One app-wide player. Wraps just_audio; just_audio_background adds
@@ -16,6 +17,7 @@ import 'audio_cache.dart';
 /// player songs that still had to be downloaded made it wait forever.
 class Player extends ChangeNotifier {
   Player._() {
+    audio.processingStateStream.listen((s) => Log.add('player state: ${s.name}'));
     audio.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) _onQueueEnd();
       notifyListeners();
@@ -31,6 +33,7 @@ class Player extends ChangeNotifier {
       notifyListeners();
     });
     audio.playbackEventStream.listen((_) {}, onError: (Object e, StackTrace st) {
+      Log.add('player error: $e');
       final t = current;
       if (t != null) _fail(t, e);
     });
@@ -117,15 +120,21 @@ class Player extends ChangeNotifier {
     notifyListeners();
     await audio.pause();
     final t = queue[pos];
+    Log.add('play #$pos "${t.title}" (${t.videoId ?? t.url})');
     try {
       final source = await _source(t);
-      if (gen != _generation) return;
+      Log.add('source ready: ${source.runtimeType}');
+      if (gen != _generation) {
+        Log.add('superseded by a newer request');
+        return;
+      }
       _base = pos;
       _loaded = 1;
       await audio
           .setAudioSources([source], initialIndex: 0)
           .timeout(const Duration(seconds: 20),
               onTimeout: () => throw Exception('The player couldn’t open the file.'));
+      Log.add('setAudioSources done, duration ${audio.duration}');
       if (gen != _generation) return;
       await audio.setLoopMode(_loop == LoopMode.one ? LoopMode.one : LoopMode.off);
       _resolving = false;
@@ -190,7 +199,7 @@ class Player extends ChangeNotifier {
   }
 
   void _fail(Track t, Object e) {
-    debugPrint('Playback error for ${t.title}: $e');
+    Log.add('FAILED "${t.title}": $e');
     final msg = e.toString().replaceFirst('Exception: ', '');
     final short = msg.length > 220 ? '${msg.substring(0, 220)}\u2026' : msg;
     error.value = 'Couldn\u2019t play \u201c${t.title}\u201d.\n$short';

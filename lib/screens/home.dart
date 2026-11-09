@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/demo_data.dart';
 import '../player/player.dart';
@@ -6,6 +7,7 @@ import '../theme.dart';
 import '../ui/cover_art.dart';
 import '../ui/icons.dart';
 import '../ui/widgets.dart';
+import '../util/log.dart';
 import 'playlist.dart';
 import 'simple_pages.dart';
 
@@ -168,6 +170,23 @@ class _AccountDrawer extends StatelessWidget {
                       ]),
                     ),
                   ),
+                  Column(mainAxisSize: MainAxisSize.min, children: [
+                  Tap(
+                    onTap: () => open(const DiagnosticsPage()),
+                    child: SizedBox(
+                      height: 56,
+                      child: Row(children: [
+                        const SizedBox(width: 12),
+                        const MIcon(MIcons.lyrics, color: kRed),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                            child: Text('Diagnostics',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500))),
+                        MIcon(MIcons.chevronRight, size: 18, color: c.sub),
+                        const SizedBox(width: 12),
+                      ]),
+                    ),
+                  ),
                   Container(
                     padding: const EdgeInsets.only(top: 12),
                     decoration:
@@ -189,11 +208,63 @@ class _AccountDrawer extends StatelessWidget {
                       ),
                     ),
                   ),
+                  ]),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class DiagnosticsPage extends StatelessWidget {
+  const DiagnosticsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Scaffold(
+      backgroundColor: c.page,
+      body: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          BackHeader(
+            label: 'Home',
+            trailing: Tap(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: Log.lines.value.join('\n')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Log copied'), behavior: SnackBarBehavior.floating));
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Text('Copy',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.link)),
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: Text('Diagnostics', style: T.largeTitle),
+          ),
+          Expanded(
+            child: ValueListenableBuilder(
+              valueListenable: Log.lines,
+              builder: (context, lines, _) => lines.isEmpty
+                  ? Center(child: Text('Nothing logged yet.', style: TextStyle(color: c.sub)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      itemCount: lines.length,
+                      itemBuilder: (_, i) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: SelectableText(lines[i],
+                            style: TextStyle(fontSize: 12, fontFamily: 'Courier', color: c.text)),
+                      ),
+                    ),
+            ),
+          ),
+        ]),
       ),
     );
   }
