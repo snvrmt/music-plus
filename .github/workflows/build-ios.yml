@@ -70,6 +70,7 @@ jobs:
             xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build > xc.log 2>&1
             echo "xcodebuild exit $?"
             grep -n -E "error:|\\*\\* BUILD|Signing|signing|requires a development team" xc.log | head -60
+            echo "--- tail"; tail -30 xc.log; echo "--- failed cmds"; grep -n -i -A3 "command.*failed\|fatal\|Undefined symbol\|not found" xc.log | head -40
             exit 1; }
 
       - name: Package IPA
