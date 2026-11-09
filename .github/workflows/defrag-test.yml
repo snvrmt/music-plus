@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['lib/source/mp4_defrag.dart', 'tool/defrag_test.dart', '.github/workflows/defrag-test.yml']
+    paths: ['lib/source/mp4_defrag.dart', 'tool/**', '.github/workflows/defrag-test.yml']
 
 jobs:
   test:
@@ -44,3 +44,21 @@ jobs:
           # Also check the output decodes to the same audio as the input
           ffmpeg -v error -i b.m4a -f s16le - | md5sum
           ffmpeg -v error -i b-out.m4a -f s16le - | md5sum
+      - uses: actions/upload-artifact@v4
+        with:
+          name: converted
+          path: '*.m4a'
+
+  apple:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: converted
+      - name: Check converted files with AVFoundation
+        run: |
+          for f in a b c; do swift tool/avcheck.swift $f-out.m4a; done
+          echo "--- originals (fragmented), for comparison:"
+          for f in a b c; do swift tool/avcheck.swift $f.m4a || true; done
