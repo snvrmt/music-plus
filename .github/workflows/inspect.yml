@@ -10,6 +10,5 @@ jobs:
           mkdir p && cd p && dart create -t console x >/dev/null && cd x
           dart pub add youtube_explode_dart:^3.1.0 >/dev/null
           D=$(ls -d ~/.pub-cache/hosted/pub.dev/youtube_explode_dart-3*/ | tail -1)
-          echo "--- tree"; find $D/lib -path '*js*' -o -path '*solver*' -o -path '*challenge*' | head -40
-          echo "--- README solver"; grep -n -i -B2 -A25 "solver\|deno\|ejs" $D/README.md | head -120
-          echo "--- YoutubeExplode ctor"; grep -n -A25 "class YoutubeExplode" $D/lib/src/youtube_explode_base.dart | head -60
+          for f in lib/solvers.dart lib/js_challenge.dart lib/src/reverse_engineering/challenges/js_challenge.dart lib/src/reverse_engineering/challenges/ejs/base_ejs_solver.dart lib/src/reverse_engineering/challenges/ejs/deno_ejs_solver.dart lib/src/reverse_engineering/challenges/ejs/ejs.dart; do echo "=== $f"; cat $D/$f; done
+          echo "=== modules size"; wc -c $D/lib/src/reverse_engineering/challenges/ejs/ejs_modules.g.dart; head -c 600 $D/lib/src/reverse_engineering/challenges/ejs/ejs_modules.g.dart
