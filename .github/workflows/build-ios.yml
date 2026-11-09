@@ -48,9 +48,22 @@ jobs:
                 config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'\\
               end/" ios/Podfile
           fi
-          if [ -f ios/Podfile ]; then sed -n '/post_install/,$p' ios/Podfile; (cd ios && pod install); fi
+          if [ -f ios/Podfile ]; then
+            sed -i '' "s/^# platform :ios.*/platform :ios, '15.0'/" ios/Podfile
+            # Make sure the app target picks up the CocoaPods settings.
+            for c in debug release profile; do
+              C=$(echo $c | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+              f=ios/Flutter/$C.xcconfig
+              [ -f $f ] || continue
+              grep -q "Pods-Runner.$c.xcconfig" $f || \
+                sed -i '' "1s;^;#include? \"Pods/Target Support Files/Pods-Runner/Pods-Runner.$c.xcconfig\"\n;" $f
+              echo "== $f"; cat $f
+            done
+            (cd ios && pod install)
+          fi
           set -o pipefail
-          flutter build ios --release --no-codesign 2>&1 | tee build.log || { grep -n -E "error:|Error:" build.log | head -40; exit 1; }
+          flutter build ios --release --no-codesign 2>&1 | tee build.log || {
+            echo "=== xcodebuild errors"; (cd ios && xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|warning: .*signing" | head -40); exit 1; }
 
       - name: Package IPA
         run: |
