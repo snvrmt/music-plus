@@ -16,6 +16,11 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Check Dart code
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings lib
+
       # The ios/ folder is generated here, so you never need a Mac to create it.
       - name: Generate iOS project if missing
         run: |
@@ -69,7 +74,7 @@ jobs:
             cd ios
             xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build > xc.log 2>&1
             echo "xcodebuild exit $?"
-            grep -n -E "error:|\\*\\* BUILD|Signing|signing|requires a development team" xc.log | head -60
+            grep -n -E "error:|Error:|\\*\\* BUILD|Signing|signing|requires a development team" xc.log | head -60
             echo "--- tail"; tail -30 xc.log; echo "--- failed cmds"; grep -n -i -A3 "command.*failed\|fatal\|Undefined symbol\|not found" xc.log | head -40
             exit 1; }
 

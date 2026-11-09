@@ -30,7 +30,6 @@ Future<void> main(List<String> args) async {
 
   final ids = [if (songs.isNotEmpty) songs.first.videoId, 'Rgrt_8mXrK8', '5NV6Rdv1a3I'];
   final combos = <String, List<YoutubeApiClient>?>{
-    'ios': [YoutubeApiClient.ios],
     'androidVr': [YoutubeApiClient.androidVr],
     'safari': [YoutubeApiClient.safari],
     'tv': [YoutubeApiClient.tv],
