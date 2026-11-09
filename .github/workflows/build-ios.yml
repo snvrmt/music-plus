@@ -46,6 +46,7 @@ jobs:
               target.build_configurations.each do |config|\\
                 config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'\\
                 config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'\\
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\\
               end/" ios/Podfile
           fi
           if [ -f ios/Podfile ]; then
@@ -63,7 +64,7 @@ jobs:
           fi
           set -o pipefail
           flutter build ios --release --no-codesign 2>&1 | tee build.log || {
-            echo "=== xcodebuild errors"; (cd ios && xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build > xc.log 2>&1; grep -n -i -E "error|fail" xc.log | head -60; echo ...; tail -40 xc.log); exit 1; }
+            echo "=== xcodebuild errors"; (cd ios && xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO build > xc.log 2>&1 || true; grep -n -i -E "error|fail" xc.log | head -60; echo ...; tail -40 xc.log); exit 1; }
 
       - name: Package IPA
         run: |
