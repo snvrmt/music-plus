@@ -55,13 +55,25 @@ class AudioCache {
 
     _setProgress(videoId, 0, 'Finding song');
     try {
-      Log.add('$videoId: resolving stream');
-      final stream = await YouTubeMusic.I.resolve(videoId);
-      Log.add('$videoId: stream ok via ${YouTubeMusic.I.workingClient}, '
-          '${stream.mimeType}, ${stream.length} bytes (${sw.elapsedMilliseconds} ms)');
-      _setProgress(videoId, 0, 'Downloading');
-      Uint8List bytes = await YouTubeMusic.I.downloadAll(stream,
-          onProgress: (got, total) => _setProgress(videoId, got / total, 'Downloading'));
+      late YtStream stream;
+      late Uint8List bytes;
+      for (var attempt = 1;; attempt++) {
+        Log.add('$videoId: resolving stream (attempt $attempt)');
+        stream = await YouTubeMusic.I.resolve(videoId);
+        final client = YouTubeMusic.I.workingClient;
+        Log.add('$videoId: stream ok via $client, '
+            '${stream.mimeType}, ${stream.length} bytes (${sw.elapsedMilliseconds} ms)');
+        _setProgress(videoId, 0, 'Downloading');
+        try {
+          bytes = await YouTubeMusic.I.downloadAll(stream,
+              onProgress: (got, total) => _setProgress(videoId, got / total, 'Downloading'));
+          break;
+        } catch (e) {
+          Log.add('$videoId: download via $client failed: $e');
+          YouTubeMusic.I.forget(videoId, badClient: client);
+          if (attempt >= 3) rethrow;
+        }
+      }
 
       Log.add('$videoId: downloaded ${bytes.length} bytes (${sw.elapsedMilliseconds} ms)');
       final audioOnly = stream.mimeType == 'audio/mp4';

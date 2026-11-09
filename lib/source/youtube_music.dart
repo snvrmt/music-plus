@@ -138,6 +138,8 @@ class YouTubeMusic {
   /// Last client that worked; tried first next time.
   String? workingClient;
 
+  int _rank(String name) => name == workingClient ? 0 : (_badClients.contains(name) ? 2 : 1);
+
   Future<Uri> audioUrl(String videoId, {List<YoutubeApiClient>? using}) async =>
       (await resolve(videoId, using: using)).url;
 
@@ -149,8 +151,7 @@ class YouTubeMusic {
     }
     final order = using != null
         ? [for (final c in using) ('custom', c)]
-        : ([...clients]..sort((a, b) =>
-            (a.$1 == workingClient ? 0 : 1).compareTo(b.$1 == workingClient ? 0 : 1)));
+        : ([...clients]..sort((a, b) => _rank(a.$1).compareTo(_rank(b.$1))));
     final problems = <String>[];
     for (final (name, client) in order) {
       try {
@@ -188,49 +189,81 @@ class YouTubeMusic {
     throw Exception('No playable stream for $videoId. ${problems.join('; ')}');
   }
 
-  /// Download a whole stream into memory, [parallel] pieces at a time.
-  /// Pieces are requested with YouTube's own `range=` URL parameter in
-  /// small chunks, which avoids YouTube slowing big requests to play speed.
+  /// Download a whole stream into memory. The first piece is fetched
+  /// alone to learn the real file size (YouTube's listed size can be off),
+  /// then the rest [parallel] pieces at a time, with spaced-out retries.
   Future<Uint8List> downloadAll(YtStream st,
-      {void Function(int received, int total)? onProgress, int parallel = 4}) async {
+      {void Function(int received, int total)? onProgress, int parallel = 2}) async {
     const chunk = 512 * 1024;
-    final total = st.length;
-    final out = Uint8List(total);
-    final starts = [for (var p = 0; p < total; p += chunk) p];
-    var next = 0, received = 0;
 
+    Future<(Uint8List, int?)> fetch(int from, int to) async {
+      Object? last;
+      for (var attempt = 0; attempt < 4; attempt++) {
+        if (attempt > 0) await Future<void>.delayed(Duration(milliseconds: 600 * attempt));
+        // Alternate between a Range header and YouTube's range= parameter.
+        final useParam = attempt.isOdd;
+        final url = useParam
+            ? st.url.replace(queryParameters: {...st.url.queryParameters, 'range': '$from-$to'})
+            : st.url;
+        try {
+          final res = await _http
+              .get(url, headers: useParam ? null : {'Range': 'bytes=$from-$to'})
+              .timeout(const Duration(seconds: 20));
+          if (res.statusCode != 200 && res.statusCode != 206) {
+            throw Exception('HTTP ${res.statusCode}');
+          }
+          final cr = res.headers['content-range'];
+          final total = cr == null ? null : int.tryParse(cr.split('/').last);
+          var body = res.bodyBytes;
+          // A 200 means the whole file came back; keep just our piece.
+          if (res.statusCode == 200 && body.length > to - from + 1) {
+            body = Uint8List.sublistView(body, from, (to + 1).clamp(0, body.length));
+          }
+          return (body, total);
+        } catch (e) {
+          last = e;
+        }
+      }
+      throw Exception('Download failed at byte $from: $last');
+    }
+
+    // First piece: also tells us the real total size.
+    final firstTo = (chunk < st.length ? chunk : st.length) - 1;
+    final (first, reported) = await fetch(0, firstTo);
+    final total = reported ?? st.length;
+    final out = Uint8List(total);
+    out.setRange(0, first.length, first);
+    var received = first.length;
+    onProgress?.call(received, total);
+
+    final starts = [for (var p = first.length; p < total; p += chunk) p];
+    var next = 0;
     Future<void> worker() async {
       while (next < starts.length) {
         final from = starts[next++];
         final to = (from + chunk < total ? from + chunk : total) - 1;
-        final url = st.url.replace(queryParameters: {
-          ...st.url.queryParameters,
-          'range': '$from-$to',
-        });
-        for (var attempt = 1;; attempt++) {
-          try {
-            final res = await _http.get(url).timeout(const Duration(seconds: 20));
-            if (res.statusCode != 200 && res.statusCode != 206) {
-              throw Exception('HTTP ${res.statusCode}');
-            }
-            final body = res.bodyBytes;
-            if (body.length != to - from + 1) {
-              throw Exception('got ${body.length} of ${to - from + 1} bytes');
-            }
-            out.setRange(from, to + 1, body);
-            received += body.length;
-            onProgress?.call(received, total);
-            break;
-          } catch (e) {
-            if (attempt >= 3) throw Exception('Download failed at byte $from: $e');
-          }
+        final (body, _) = await fetch(from, to);
+        if (body.length != to - from + 1) {
+          throw Exception('Got ${body.length} of ${to - from + 1} bytes at $from');
         }
+        out.setRange(from, to + 1, body);
+        received += body.length;
+        onProgress?.call(received, total);
       }
     }
 
     await Future.wait([for (var i = 0; i < parallel; i++) worker()]);
     return out;
   }
+
+  /// Forget a stream link that didn't work, so the next try gets a new one.
+  void forget(String videoId, {String? badClient}) {
+    _streamCache.remove(videoId);
+    if (badClient != null && workingClient == badClient) workingClient = null;
+    if (badClient != null) _badClients.add(badClient);
+  }
+
+  final Set<String> _badClients = {};
 
   /// Stream bytes [start]..[end] of a stream in 1 MB pieces.
   Stream<List<int>> download(YtStream st, {int start = 0, int? end}) async* {
