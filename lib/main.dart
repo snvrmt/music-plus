@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
+import 'source/jsc_solver.dart';
+import 'source/youtube_music.dart';
 import 'theme.dart';
+import 'util/log.dart';
 import 'ui/shell.dart';
 
 Future<void> main() async {
@@ -11,6 +14,8 @@ Future<void> main() async {
     androidNotificationChannelName: 'Music+ playback',
     androidNotificationOngoing: true,
   );
+  YouTubeMusic.solverFactory = JscSolver.init;
+  YouTubeMusic.log = Log.add;
   runApp(const MusicPlusApp());
 }
 

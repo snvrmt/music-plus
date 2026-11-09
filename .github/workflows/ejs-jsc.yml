@@ -1,0 +1,21 @@
+name: Test puzzle solver in JavaScriptCore
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tool/ejs_jsc_test.dart', '.github/workflows/ejs-jsc.yml']
+jobs:
+  jsc:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: flutter pub get
+      - run: dart run tool/ejs_jsc_test.dart
+      - name: Run in JavaScriptCore (iPhone engine)
+        run: |
+          JSC=$(ls /System/Library/Frameworks/JavaScriptCore.framework/Versions/*/Helpers/jsc | head -1)
+          time $JSC ejs_test.js | cut -c1-400
+      - name: Run in Node for comparison
+        run: node ejs_test_node.js | cut -c1-400
