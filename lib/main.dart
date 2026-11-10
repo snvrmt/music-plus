@@ -16,6 +16,7 @@ Future<void> main() async {
   );
   YouTubeMusic.solverFactory = JscSolver.init;
   YouTubeMusic.log = Log.add;
+  JscSolver.log = Log.add;
   runApp(const MusicPlusApp());
 }
 

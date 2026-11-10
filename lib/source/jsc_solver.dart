@@ -16,11 +16,19 @@ class JscSolver extends BaseEJSSolver {
     return JscSolver._(rt);
   }
 
+  /// Messages for the diagnostics log.
+  static void Function(String)? log;
+
   @override
   Future<String> executeJavaScript(String jsCode) async {
+    final sw = Stopwatch()..start();
     final r = _rt.evaluate(jsCode);
-    if (r.isError) throw Exception('Puzzle solver error: ${r.stringResult}');
-    return r.stringResult;
+    final out = r.stringResult;
+    final preview = out.length > 300 ? '${out.substring(0, 300)}\u2026' : out;
+    log?.call('solver: ${jsCode.length} chars in, ${sw.elapsedMilliseconds} ms, '
+        '${r.isError ? 'ERROR ' : ''}out: $preview');
+    if (r.isError) throw Exception('Puzzle solver error: $out');
+    return out;
   }
 
   @override

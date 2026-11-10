@@ -150,10 +150,15 @@ class YouTubeMusic {
   /// now hand out URLs that answer 403 without extra tokens.
   static List<(String, YoutubeApiClient)> clients = [
     ('tv', YoutubeApiClient.tv),
+    ('tvEmbedded', YoutubeApiClient.tvSimplyEmbedded),
     ('androidVr', YoutubeApiClient.androidVr),
+    ('mediaConnect', YoutubeApiClient.mediaConnect),
+    ('androidMusic', YoutubeApiClient.androidMusic),
+    ('androidSdkless', YoutubeApiClient.androidSdkless),
     ('safari', YoutubeApiClient.safari),
-    ('android', YoutubeApiClient.android),
+    ('webCreator', YoutubeApiClient.webCreator),
     ('mweb', YoutubeApiClient.mweb),
+    ('android', YoutubeApiClient.android),
   ];
 
   /// Last client that worked; tried first next time.
@@ -205,7 +210,8 @@ class YouTubeMusic {
           problems.add('$name: HTTP $code');
         }
       } catch (e) {
-        problems.add('$name: ${e.toString().split('\n').first}');
+        final msg = e.toString().split('\n').where((l) => l.trim().isNotEmpty).take(2).join(' | ');
+        problems.add('$name: $msg');
       }
     }
     throw Exception('No playable stream for $videoId. ${problems.join('; ')}');
